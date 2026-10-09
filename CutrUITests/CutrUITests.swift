@@ -11,7 +11,8 @@ final class CutrUITests: XCTestCase {
         app.launchArguments = ["-uitest"]
         app.launch()
 
-        // Empty state offers a button to create the first cut list.
+        // Open All Cut Lists; its empty state offers a button to create the first cut list.
+        app.buttons["All Cut Lists"].firstMatch.tap()
         app.buttons["New Cut List"].firstMatch.tap()
 
         // Add two parts using "Save and Add Another".
@@ -53,6 +54,7 @@ final class CutrUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-demo"]
         app.launch()
+        app.buttons["All Cut Lists"].firstMatch.tap()
 
         let first = app.cells.firstMatch
         XCTAssertTrue(first.waitForExistence(timeout: 5))
@@ -65,6 +67,27 @@ final class CutrUITests: XCTestCase {
         app.cells.firstMatch.press(forDuration: 1)
         app.buttons["Duplicate"].tap()
         XCTAssertTrue(app.staticTexts["Bird Box Copy"].waitForExistence(timeout: 5))
+    }
+
+    @MainActor
+    func testCreateProjectAndAddCutList() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-uitest"]
+        app.launch()
+
+        app.buttons["New Project"].firstMatch.tap()
+        let nameField = app.textFields["Name, e.g. Kitchen Renovation"]
+        XCTAssertTrue(nameField.waitForExistence(timeout: 3))
+        nameField.typeText("Shed")
+        app.buttons["Create"].tap()
+
+        // Creating a project opens it; add a cut list inside it.
+        XCTAssertTrue(app.navigationBars["Shed"].waitForExistence(timeout: 5))
+        app.buttons["New Cut List"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["Add Part"].waitForExistence(timeout: 5))
+
+        // The cut list shows the project it belongs to.
+        XCTAssertTrue(app.buttons.containing(NSPredicate(format: "label CONTAINS 'Shed'")).firstMatch.exists)
     }
 
     private func type(_ field: XCUIElement, _ text: String) {

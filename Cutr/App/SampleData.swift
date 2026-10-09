@@ -3,11 +3,18 @@ import SwiftData
 
 enum SampleData {
     static func insert(into context: ModelContext) {
+        let renovation = Folder(name: String(localized: "Kitchen Renovation"))
+        renovation.notes = String(localized: "Ground floor kitchen refit.")
+        let workshop = Folder(name: String(localized: "Workshop"))
+        context.insert(renovation)
+        context.insert(workshop)
+
         let kitchen = Project(name: String(localized: "Kitchen Base Units"), kerf: 3, edgeTrim: 5)
         kitchen.notes = String(localized: "Carcasses for the three base units under the window.")
         kitchen.createdAt = .now.addingTimeInterval(-86_400 * 6)
         kitchen.updatedAt = .now.addingTimeInterval(-3_600)
         context.insert(kitchen)
+        kitchen.folder = renovation
         let ply = StockSheet(name: "Birch Ply 18mm", length: 2440, width: 1220, thickness: 18, price: 72, order: 0)
         let mdf = StockSheet(name: "MDF 6mm", length: 2440, width: 1220, thickness: 6, price: 19, order: 1)
         ply.project = kitchen
@@ -30,6 +37,7 @@ enum SampleData {
         shelf.createdAt = .now.addingTimeInterval(-86_400 * 20)
         shelf.updatedAt = .now.addingTimeInterval(-86_400 * 2)
         context.insert(shelf)
+        shelf.folder = workshop
         let osb = StockSheet(name: "OSB 18mm", length: 2440, width: 1220, thickness: 18, quantity: 3, price: 28, order: 0)
         osb.project = shelf
         for (i, p) in [("Upright", 1800.0, 400.0, 4), ("Shelf", 1180.0, 400.0, 6)].enumerated() {
@@ -58,6 +66,18 @@ enum SampleData {
             let part = Part(name: p.0, length: p.1, width: p.2, quantity: p.3, grainLocked: true, order: i)
             part.project = bird
         }
+        let wall = Project(name: String(localized: "Wall Cabinets"), kerf: 3, edgeTrim: 5)
+        wall.createdAt = .now.addingTimeInterval(-86_400 * 5)
+        wall.updatedAt = .now.addingTimeInterval(-86_400)
+        context.insert(wall)
+        wall.folder = renovation
+        let wallPly = StockSheet(name: "Birch Ply 18mm", length: 2440, width: 1220, thickness: 18, price: 72, order: 0)
+        wallPly.project = wall
+        for (i, p) in [("Side", 720.0, 320.0, 6, true), ("Top & bottom", 564.0, 320.0, 6, false), ("Shelf", 560.0, 300.0, 3, false)].enumerated() {
+            let part = Part(name: p.0, length: p.1, width: p.2, quantity: p.3, grainLocked: p.4, order: i)
+            part.project = wall
+        }
+
         try? context.save()
     }
 }

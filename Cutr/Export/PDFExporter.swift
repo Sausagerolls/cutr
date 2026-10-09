@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
+import SwiftData
 
 /// A snapshot of everything needed to print a project, so PDF rendering
 /// never touches SwiftData objects off the main actor.
@@ -56,10 +57,19 @@ nonisolated enum PDFExporter {
     static let margin: CGFloat = 36
 
     static func render(_ report: CutSheetReport) -> Data {
+        renderDocument(title: report.title, project: nil, reports: [report])
+    }
+
+    /// Renders a project: a cover page summarising every cut list, then each cut list in full.
+    static func render(_ project: ProjectReport) -> Data {
+        renderDocument(title: project.title, project: project, reports: project.reports)
+    }
+
+    private static func renderDocument(title: String, project: ProjectReport?, reports: [CutSheetReport]) -> Data {
         let renderer = UIGraphicsPDFRenderer(bounds: CGRect(origin: .zero, size: pageSize), format: {
             let format = UIGraphicsPDFRendererFormat()
             format.documentInfo = [
-                kCGPDFContextTitle as String: report.title,
+                kCGPDFContextTitle as String: title,
                 kCGPDFContextCreator as String: "Cutr",
             ]
             return format
@@ -70,23 +80,107 @@ nonisolated enum PDFExporter {
             func beginPage() {
                 ctx.beginPage()
                 pageNumber += 1
-                footer(report, page: pageNumber)
+                footer(page: pageNumber)
             }
 
-            beginPage()
-            var y = header(report)
-            y = summary(report, top: y)
-            y = partsTable(report, top: y) { beginPage(); return margin }
+            if let project {
+                beginPage()
+                cover(project) { beginPage(); return margin }
+            }
 
-            // Sheets flow onto pages, two or more per page when they fit.
-            y = content.maxY
-            for (index, sheet) in report.result.sheets.enumerated() {
-                if index == 0 || y + sheetBlockHeight(sheet) > content.maxY {
-                    beginPage()
-                    y = content.minY
+            for report in reports {
+                beginPage()
+                var y = header(report)
+                y = summary(report, top: y)
+                y = partsTable(report, top: y) { beginPage(); return margin }
+
+                // Sheets flow onto pages, two or more per page when they fit.
+                y = content.maxY
+                for (index, sheet) in report.result.sheets.enumerated() {
+                    if index == 0 || y + sheetBlockHeight(sheet) > content.maxY {
+                        beginPage()
+                        y = content.minY
+                    }
+                    y = drawSheet(report, sheet: sheet, index: index, top: y, context: ctx.cgContext)
                 }
-                y = drawSheet(report, sheet: sheet, index: index, top: y, context: ctx.cgContext)
             }
+        }
+    }
+
+    private static func cover(_ p: ProjectReport, newPage: () -> CGFloat) {
+        let currency = Locale.current.currency?.identifier ?? "GBP"
+        var y = content.minY
+        y += text(p.title, at: CGPoint(x: content.minX, y: y), attrs(24, .bold))
+        let date = p.date.formatted(date: .long, time: .shortened)
+        y += text(String(localized: "Project · \(p.reports.count) cut lists · \(date)"), at: CGPoint(x: content.minX, y: y + 2), attrs(10, color: .darkGray)) + 6
+        if !p.notes.isEmpty {
+            y += text(p.notes, at: CGPoint(x: content.minX, y: y), attrs(10)) + 6
+        }
+        line(y)
+        y += 10
+
+        let totals: [(String, String)] = [
+            (String(localized: "Cut lists"), "\(p.reports.count)"),
+            (String(localized: "Parts"), "\(p.totalParts)"),
+            (String(localized: "Sheets"), "\(p.totalSheets)"),
+            (String(localized: "Yield"), p.utilisation.formatted(.percent.precision(.fractionLength(0)))),
+        ] + (p.totalCost > 0 ? [(String(localized: "Cost"), p.totalCost.formatted(.currency(code: currency)))] : [])
+        let columnWidth = content.width / CGFloat(totals.count)
+        for (i, stat) in totals.enumerated() {
+            let x = content.minX + CGFloat(i) * columnWidth
+            text(stat.0.uppercased(), at: CGPoint(x: x, y: y), width: columnWidth, attrs(7.5, .semibold, color: .darkGray))
+            text(stat.1, at: CGPoint(x: x, y: y + 11), width: columnWidth, attrs(14, .semibold, mono: true))
+        }
+        y += 44
+
+        // Shopping list across the whole project.
+        y += text(String(localized: "Materials to buy"), at: CGPoint(x: content.minX, y: y), attrs(13, .bold)) + 6
+        let u = p.unit
+        for m in p.materials {
+            var s = "\(m.count) × \(m.name) — \(u.format(m.length)) × \(u.format(m.width)) × \(u.format(m.thickness)) \(u.symbol)"
+            if m.cost > 0 { s += " · " + m.cost.formatted(.currency(code: currency)) }
+            y += text(s, at: CGPoint(x: content.minX, y: y), attrs(10)) + 3
+        }
+        y += 14
+
+        // One row per cut list.
+        y += text(String(localized: "Cut lists"), at: CGPoint(x: content.minX, y: y), attrs(13, .bold)) + 6
+        let columns: [(String, CGFloat, Bool)] = [
+            (String(localized: "Name"), content.width - 4 * 70 - 16, false),
+            (String(localized: "Parts"), 70, true),
+            (String(localized: "Sheets"), 70, true),
+            (String(localized: "Yield"), 70, true),
+            (String(localized: "Cost"), 70, true),
+        ]
+        func headerRow() {
+            var x = content.minX
+            for col in columns {
+                text(col.0, at: CGPoint(x: x, y: y), width: col.1, attrs(8, .semibold, color: .darkGray), alignRight: col.2)
+                x += col.1 + 4
+            }
+            y += 14
+        }
+        headerRow()
+        for (i, r) in p.reports.enumerated() {
+            if y > content.maxY - 30 {
+                y = newPage()
+                headerRow()
+            }
+            if i.isMultiple(of: 2), let cg = UIGraphicsGetCurrentContext() {
+                cg.setFillColor(UIColor(white: 0.95, alpha: 1).cgColor)
+                cg.fill(CGRect(x: content.minX - 4, y: y - 2, width: content.width + 8, height: 16))
+            }
+            let values = [
+                r.title, "\(r.result.placedCount)", "\(r.result.sheets.count)",
+                r.result.utilisation.formatted(.percent.precision(.fractionLength(0))),
+                r.result.totalCost > 0 ? r.result.totalCost.formatted(.currency(code: currency)) : "—",
+            ]
+            var x = content.minX
+            for (col, value) in zip(columns, values) {
+                text(value, at: CGPoint(x: x, y: y), width: col.1, attrs(9.5, mono: col.2), alignRight: col.2)
+                x += col.1 + 4
+            }
+            y += 16
         }
     }
 
@@ -289,34 +383,120 @@ nonisolated enum PDFExporter {
         return y + 24
     }
 
-    private static func footer(_ r: CutSheetReport, page: Int) {
+    private static func footer(page: Int) {
         let a = attrs(8, color: .gray)
         text(String(localized: "Generated with Cutr"), at: CGPoint(x: content.minX, y: pageSize.height - margin + 10), width: 200, a)
         text(String(localized: "Page \(page)"), at: CGPoint(x: content.maxX - 200, y: pageSize.height - margin + 10), width: 200, a, alignRight: true)
     }
 }
 
-/// Lets SwiftUI's ShareLink export a cut sheet as a named PDF file.
+/// Everything needed to print a project of several cut lists.
+nonisolated struct ProjectReport: Sendable {
+    struct Material: Sendable {
+        var name: String
+        var length: Double
+        var width: Double
+        var thickness: Double
+        var count: Int
+        var cost: Double
+    }
+
+    var title: String
+    var notes: String
+    var date: Date
+    var unit: LengthUnit
+    var reports: [CutSheetReport]
+
+    @MainActor
+    init(folder: Folder, unit: LengthUnit) {
+        title = folder.name.isEmpty ? String(localized: "Untitled Project") : folder.name
+        notes = folder.notes
+        date = .now
+        self.unit = unit
+        reports = folder.sortedCutLists.map { CutSheetReport(project: $0, result: $0.optimize(), unit: unit) }
+    }
+
+    var totalParts: Int { reports.reduce(0) { $0 + $1.result.placedCount } }
+    var totalSheets: Int { reports.reduce(0) { $0 + $1.result.sheets.count } }
+    var totalCost: Double { reports.reduce(0) { $0 + $1.result.totalCost } }
+    var utilisation: Double {
+        let sheetArea = reports.reduce(0) { $0 + $1.result.totalSheetArea }
+        return sheetArea > 0 ? reports.reduce(0) { $0 + $1.result.totalPartArea } / sheetArea : 0
+    }
+
+    /// Sheets needed across all cut lists, merged when the material and size match.
+    var materials: [Material] {
+        var merged: [Material] = []
+        for usage in reports.flatMap(\.result.usage) {
+            let s = usage.stock
+            if let i = merged.firstIndex(where: {
+                $0.name == s.name && $0.length == s.length && $0.width == s.width && $0.thickness == s.thickness
+            }) {
+                merged[i].count += usage.sheetsUsed
+                merged[i].cost += usage.cost
+            } else {
+                merged.append(Material(name: s.name, length: s.length, width: s.width, thickness: s.thickness,
+                                       count: usage.sheetsUsed, cost: usage.cost))
+            }
+        }
+        return merged
+    }
+
+    var fileName: String { Self.fileName(for: title) }
+
+    static func fileName(for title: String) -> String {
+        let name = title.isEmpty ? String(localized: "Untitled Project") : title
+        let safe = name.components(separatedBy: CharacterSet(charactersIn: "/\\?%*|\"<>:")).joined(separator: "-")
+        return "\(safe) – Project Cut Sheets.pdf"
+    }
+}
+
+/// Lets SwiftUI's ShareLink export a cut sheet or project as a named PDF file.
+/// The PDF is only built when the user actually shares or prints it.
 nonisolated struct CutSheetPDF: Transferable, Sendable {
-    var report: CutSheetReport
+    var fileName: String
+    var render: @Sendable () async -> Data
+
+    init(report: CutSheetReport) {
+        fileName = report.fileName
+        render = { PDFExporter.render(report) }
+    }
+
+    @MainActor
+    init(folder: Folder, unit: LengthUnit) {
+        fileName = ProjectReport.fileName(for: folder.name)
+        // Models are not Sendable, so look the folder up again on the main actor by ID.
+        let id = folder.persistentModelID
+        let container = folder.modelContext?.container
+        render = {
+            let report = await MainActor.run { () -> ProjectReport? in
+                guard let folder = container?.mainContext.model(for: id) as? Folder else { return nil }
+                return ProjectReport(folder: folder, unit: unit)
+            }
+            return report.map(PDFExporter.render) ?? Data()
+        }
+    }
 
     static var transferRepresentation: some TransferRepresentation {
         FileRepresentation(exportedContentType: .pdf) { pdf in
-            let url = FileManager.default.temporaryDirectory.appendingPathComponent(pdf.report.fileName)
-            try PDFExporter.render(pdf.report).write(to: url, options: .atomic)
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent(pdf.fileName)
+            try await pdf.render().write(to: url, options: .atomic)
             return SentTransferredFile(url)
         }
     }
 }
 
 enum PrintService {
-    static func print(_ report: CutSheetReport) {
-        let controller = UIPrintInteractionController.shared
-        let info = UIPrintInfo(dictionary: nil)
-        info.outputType = .general
-        info.jobName = report.title
-        controller.printInfo = info
-        controller.printingItem = PDFExporter.render(report)
-        controller.present(animated: true)
+    static func print(_ pdf: CutSheetPDF) {
+        Task {
+            let data = await pdf.render()
+            let controller = UIPrintInteractionController.shared
+            let info = UIPrintInfo(dictionary: nil)
+            info.outputType = .general
+            info.jobName = (pdf.fileName as NSString).deletingPathExtension
+            controller.printInfo = info
+            controller.printingItem = data
+            controller.present(animated: true)
+        }
     }
 }

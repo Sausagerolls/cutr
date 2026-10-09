@@ -32,6 +32,7 @@ done
 
 iphone=$(udid "$IPHONE"); ipad=$(udid "$IPAD")
 echo "iPhone ($IPHONE)"
+shoot "$iphone" iphone-0-projects projects light
 shoot "$iphone" iphone-1-list list light
 shoot "$iphone" iphone-2-detail detail light
 shoot "$iphone" iphone-3-layout layout light

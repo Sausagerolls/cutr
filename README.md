@@ -10,6 +10,7 @@
 </p>
 
 <p align="center">
+  <img src="docs/screenshots/iphone-0-projects.png" width="200">
   <img src="docs/screenshots/iphone-1-list.png" width="200">
   <img src="docs/screenshots/iphone-2-detail.png" width="200">
   <img src="docs/screenshots/iphone-3-layout.png" width="200">
@@ -24,6 +25,7 @@
 - **Multiple materials** – mix sheet types (e.g. 18 mm ply and 6 mm MDF) in one cut list, with limited or unlimited stock.
 - **Cost and yield** – price per sheet, total cost and percentage of material used.
 - **Saved cut lists** – name, search, duplicate and sort by name, date created, date modified or number of parts.
+- **Projects** – group related cut lists (for example a kitchen refit's base units, wall units and worktops) and export the whole project as one PDF with a combined shopping list of sheets to buy.
 - **iCloud sync** – cut lists sync between iPhone and iPad through your private iCloud database.
 - **PDF export and printing** – a printable cut sheet with parts table and a diagram of every sheet.
 - **Metric and imperial** – millimetres, centimetres or inches with fractions (`23 7/16`).
@@ -63,7 +65,7 @@ Launches the app with `-demo` (in-memory sample data) on iPhone and iPad simulat
 
 | Path | Contents |
 | --- | --- |
-| `Cutr/Models` | SwiftData models (`Project`, `StockSheet`, `Part`) and length units |
+| `Cutr/Models` | SwiftData models and length units. `Project` is a cut list; `Folder` is shown to users as a project that groups cut lists |
 | `Cutr/Optimizer` | The guillotine bin-packing optimiser |
 | `Cutr/Views` | SwiftUI views |
 | `Cutr/Export` | Sheet drawing, PDF export and printing |

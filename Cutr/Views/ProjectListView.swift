@@ -22,9 +22,10 @@ enum ProjectSort: String, CaseIterable, Identifiable {
 struct ProjectListView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.lengthUnit) private var unit
-    @Query private var projects: [Project]
+    @Query private var allProjects: [Project]
+    @Query(sort: \Folder.name) private var folders: [Folder]
+    let filter: LibraryFilter
     @Binding var selection: Project?
-    @Binding var showSettings: Bool
 
     @AppStorage(SettingsKey.projectSort) private var sort: ProjectSort = .modified
     @AppStorage(SettingsKey.projectSortAscending) private var ascending = false
@@ -35,6 +36,10 @@ struct ProjectListView: View {
     @AppStorage(SettingsKey.defaultSheetThickness) private var defaultSheetThickness = 18.0
     @State private var search = ""
     @State private var pendingDelete: Project?
+
+    private var projects: [Project] {
+        allProjects.filter { filter.contains($0) }
+    }
 
     private var visibleProjects: [Project] {
         let filtered = search.isEmpty ? projects : projects.filter {
@@ -56,12 +61,13 @@ struct ProjectListView: View {
         List(selection: $selection) {
             ForEach(visibleProjects) { project in
                 NavigationLink(value: project) {
-                    ProjectRow(project: project, sort: sort)
+                    ProjectRow(project: project, sort: sort, showFolder: filter == .all)
                 }
                 .contextMenu {
                     Button("Duplicate", systemImage: "plus.square.on.square") {
                         selection = project.duplicate(in: context)
                     }
+                    moveMenu(for: project)
                     Button("Delete", systemImage: "trash", role: .destructive) {
                         pendingDelete = project
                     }
@@ -82,7 +88,11 @@ struct ProjectListView: View {
                 ContentUnavailableView {
                     Label("No Cut Lists", systemImage: "rectangle.split.3x3")
                 } description: {
-                    Text("Add your sheet sizes and the parts you need. Cutr works out the most efficient way to cut them.")
+                    if filter.folder != nil {
+                        Text("Add a cut list to this project for each piece of furniture or job.")
+                    } else {
+                        Text("Add your sheet sizes and the parts you need. Cutr works out the most efficient way to cut them.")
+                    }
                 } actions: {
                     Button("New Cut List", action: addProject)
                         .buttonStyle(.borderedProminent)
@@ -91,13 +101,19 @@ struct ProjectListView: View {
                 ContentUnavailableView.search(text: search)
             }
         }
-        .navigationTitle("Cutr")
+        .navigationTitle(filter.title)
         .searchable(text: $search, prompt: "Search cut lists")
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button("Settings", systemImage: "gearshape") { showSettings = true }
-            }
             ToolbarItemGroup(placement: .topBarTrailing) {
+                if let folder = filter.folder, !projects.isEmpty {
+                    Menu("Export Project", systemImage: "square.and.arrow.up") {
+                        let pdf = CutSheetPDF(folder: folder, unit: unit)
+                        ShareLink(item: pdf, preview: SharePreview(pdf.fileName, image: Image(systemName: "doc.richtext"))) {
+                            Label("Export Project PDF", systemImage: "doc.richtext")
+                        }
+                        Button("Print Project", systemImage: "printer") { PrintService.print(pdf) }
+                    }
+                }
                 sortMenu
                 Button("New Cut List", systemImage: "plus", action: addProject)
             }
@@ -140,9 +156,25 @@ struct ProjectListView: View {
         }
     }
 
+    @ViewBuilder
+    private func moveMenu(for project: Project) -> some View {
+        Menu("Move to Project", systemImage: "folder") {
+            Picker("Project", selection: Binding(get: { project.folder }, set: { newValue in
+                project.folder = newValue
+                project.touch()
+            })) {
+                Text("None").tag(Folder?.none)
+                ForEach(folders) { folder in
+                    Text(folder.name).tag(Optional(folder))
+                }
+            }
+        }
+    }
+
     private func addProject() {
         let project = Project(name: String(localized: "New Cut List"), kerf: defaultKerf, edgeTrim: defaultEdgeTrim)
         context.insert(project)
+        project.folder = filter.folder
         let thickness = unit.format(defaultSheetThickness, includeSymbol: true)
         let stock = StockSheet(name: String(localized: "Plywood \(thickness)"), length: defaultSheetLength,
                                width: defaultSheetWidth, thickness: defaultSheetThickness)
@@ -155,6 +187,7 @@ struct ProjectListView: View {
 private struct ProjectRow: View {
     let project: Project
     let sort: ProjectSort
+    let showFolder: Bool
     @Environment(\.lengthUnit) private var unit
 
     var body: some View {
@@ -178,7 +211,11 @@ private struct ProjectRow: View {
         let parts = project.totalPartCount
         let partsText = String(localized: "\(parts) parts")
         let date = sort == .created ? project.createdAt : project.updatedAt
-        return "\(partsText) · \(date.formatted(.relative(presentation: .named)))"
+        let base = "\(partsText) · \(date.formatted(.relative(presentation: .named)))"
+        if showFolder, let folder = project.folder, !folder.name.isEmpty {
+            return "\(folder.name) · \(base)"
+        }
+        return base
     }
 }
 

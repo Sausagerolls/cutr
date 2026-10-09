@@ -6,6 +6,7 @@ struct ProjectDetailView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.lengthUnit) private var unit
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Query(sort: \Folder.name) private var folders: [Folder]
 
     @State private var result: OptimizationResult = .empty
     @State private var isOptimising = false
@@ -128,7 +129,7 @@ struct ProjectDetailView: View {
                     Label("Export PDF", systemImage: "doc.richtext")
                 }
                 Button("Print", systemImage: "printer") {
-                    PrintService.print(report)
+                    PrintService.print(CutSheetPDF(report: report))
                 }
             }
             .disabled(result.sheets.isEmpty)
@@ -144,6 +145,16 @@ struct ProjectDetailView: View {
                     .font(.headline)
                 TextField("Notes", text: $project.notes, axis: .vertical)
                     .lineLimit(1...4)
+                if !folders.isEmpty {
+                    Picker(selection: $project.folder) {
+                        Text("None").tag(Folder?.none)
+                        ForEach(folders) { folder in
+                            Text(folder.name).tag(Optional(folder))
+                        }
+                    } label: {
+                        Label("Project", systemImage: "folder")
+                    }
+                }
             }
 
             Section {
@@ -226,6 +237,7 @@ struct ProjectDetailView: View {
         }
         .onChange(of: project.name) { project.touch() }
         .onChange(of: project.notes) { project.touch() }
+        .onChange(of: project.folder) { project.touch() }
         .onChange(of: project.kerf) { project.touch() }
         .onChange(of: project.edgeTrim) { project.touch() }
     }

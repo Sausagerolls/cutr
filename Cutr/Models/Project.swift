@@ -13,6 +13,8 @@ final class Project {
     /// Margin trimmed off every edge of a sheet before parts are placed.
     var edgeTrim: Double = 0
     var notes: String = ""
+    /// The project this cut list is grouped under, if any.
+    var folder: Folder?
 
     @Relationship(deleteRule: .cascade, inverse: \StockSheet.project)
     var stocks: [StockSheet]? = []
@@ -42,6 +44,7 @@ final class Project {
 
     func touch() {
         updatedAt = .now
+        folder?.touch()
     }
 
     /// Creates an independent copy including all stock sheets and parts.
@@ -49,6 +52,7 @@ final class Project {
         let copy = Project(name: String(localized: "\(name) Copy"), kerf: kerf, edgeTrim: edgeTrim)
         copy.notes = notes
         context.insert(copy)
+        copy.folder = folder
         var idMap: [UUID: UUID] = [:]
         for stock in sortedStocks {
             let s = StockSheet(

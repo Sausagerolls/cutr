@@ -12,7 +12,7 @@ struct CutrApp: App {
         .modelContainer(container)
     }
 
-    static let schema = Schema([Project.self, StockSheet.self, Part.self])
+    static let schema = Schema([Folder.self, Project.self, StockSheet.self, Part.self])
 
     /// Uses CloudKit sync when iCloud is available, falling back to a local
     /// store so the app still works when signed out or without entitlements.
