@@ -192,7 +192,7 @@ struct PartEditorView: View {
             }
         }
         .navigationDestination(isPresented: $showShapeEditor) {
-            ShapeEditorView(points: shapeBinding)
+            ShapeEditorView(shape: shapeBinding)
         }
         .onAppear(perform: load)
     }

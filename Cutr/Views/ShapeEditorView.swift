@@ -2,9 +2,14 @@ import SwiftUI
 
 /// Edits a part's outline. Points can be dragged, added on edges and deleted,
 /// with snapping to a grid and to alignment guides from the other points.
+/// Changes are made on a copy and only written back when the user taps Done.
 struct ShapeEditorView: View {
-    @Binding var points: [ShapePoint]
+    @Binding var shape: [ShapePoint]
     @Environment(\.lengthUnit) private var unit
+    @Environment(\.dismiss) private var dismiss
+    @State private var points: [ShapePoint] = []
+    @State private var original: [ShapePoint] = []
+    @State private var loaded = false
 
     enum Tool: String, CaseIterable, Identifiable {
         case move, add, delete
@@ -64,8 +69,15 @@ struct ShapeEditorView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { toolbar }
             .sensoryFeedback(.selection, trigger: snapFeedback)
+            .navigationBarBackButtonHidden()
+            .interactiveDismissDisabled(points != original)
             .onAppear {
                 if gridSize <= 0 { gridSize = unit == .inches ? 6.35 : 10 }
+                if !loaded {
+                    points = shape
+                    original = shape
+                    loaded = true
+                }
                 fitViewport()
             }
             .onChange(of: points) {
@@ -398,7 +410,22 @@ struct ShapeEditorView: View {
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
-        ToolbarItemGroup(placement: .topBarTrailing) {
+        ToolbarItem(placement: .cancellationAction) {
+            Button("Cancel", role: .cancel) { dismiss() }
+        }
+        ToolbarItem(placement: .confirmationAction) {
+            Button("Done") {
+                if points != original { shape = points }
+                dismiss()
+            }
+            .fontWeight(.semibold)
+            .disabled(!isValid)
+        }
+    }
+
+    /// Undo, redo, presets and snapping, shown above the tool picker.
+    private var actionBar: some View {
+        HStack(spacing: 4) {
             Button("Undo", systemImage: "arrow.uturn.backward") {
                 guard let last = undoStack.popLast() else { return }
                 redoStack.append(points)
@@ -413,7 +440,8 @@ struct ShapeEditorView: View {
                 selected = nil
             }
             .disabled(redoStack.isEmpty)
-            Menu("Shape", systemImage: "square.on.circle") {
+            Spacer()
+            Menu {
                 Section("Start From") {
                     ForEach(PartShape.Preset.allCases) { preset in
                         Button(preset.title, systemImage: preset.systemImage) {
@@ -427,8 +455,10 @@ struct ShapeEditorView: View {
                     Button("Flip Vertically", systemImage: "arrow.up.and.down.righttriangle.up.righttriangle.down") { flip(horizontal: false) }
                     Button("Rotate 90°", systemImage: "rotate.right") { rotate() }
                 }
+            } label: {
+                Label("Shapes", systemImage: "square.on.circle")
             }
-            Menu("Snapping", systemImage: "squareshape.split.3x3") {
+            Menu {
                 Toggle("Snap to Grid", systemImage: "grid", isOn: $snapGrid)
                 Toggle("Snap to Alignment", systemImage: "align.horizontal.center", isOn: $snapAlign)
                 Picker("Grid Size", selection: $gridSize) {
@@ -437,8 +467,13 @@ struct ShapeEditorView: View {
                     }
                 }
                 .pickerStyle(.menu)
+            } label: {
+                Label("Snapping", systemImage: snapGrid || snapAlign ? "squareshape.split.3x3" : "square.dashed")
             }
         }
+        .buttonStyle(.bordered)
+        .labelStyle(.titleAndIcon)
+        .controlSize(.small)
     }
 
     private var gridOptions: [Double] {
@@ -480,6 +515,8 @@ struct ShapeEditorView: View {
             }
             .font(.caption)
             .foregroundStyle(.secondary)
+
+            actionBar
 
             Picker("Tool", selection: $tool) {
                 ForEach(Tool.allCases) { tool in

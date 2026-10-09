@@ -105,7 +105,7 @@ final class CutrUITests: XCTestCase {
         // Open the shape editor and apply the Pointed End preset.
         app.buttons.containing(NSPredicate(format: "label CONTAINS 'Rectangle'")).firstMatch.tap()
         XCTAssertTrue(app.navigationBars["Shape"].waitForExistence(timeout: 5))
-        app.buttons["Shape"].tap()
+        app.buttons["Shapes"].tap()
         app.buttons["Pointed End"].tap()
         XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label BEGINSWITH '5 points'")).firstMatch.waitForExistence(timeout: 3))
 
@@ -113,7 +113,7 @@ final class CutrUITests: XCTestCase {
         app.buttons["Add Point"].tap()
         app.buttons["Move"].tap()
 
-        app.navigationBars["Shape"].buttons.element(boundBy: 0).tap()
+        app.buttons["Done"].tap()
         XCTAssertTrue(app.staticTexts["Custom Shape"].waitForExistence(timeout: 3))
         app.buttons["Add"].tap()
 
