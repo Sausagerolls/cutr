@@ -90,6 +90,9 @@ struct RootView: View {
         case "detail", "layout", "part":
             filter = .all
             selection = projects.first
+        case "shape":
+            filter = .all
+            selection = projects.first { $0.name == "Bird Box" }
         case "split":
             filter = .all
             selection = projects.first

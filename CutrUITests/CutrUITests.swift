@@ -90,6 +90,37 @@ final class CutrUITests: XCTestCase {
         XCTAssertTrue(app.buttons.containing(NSPredicate(format: "label CONTAINS 'Shed'")).firstMatch.exists)
     }
 
+    @MainActor
+    func testShapeEditorPreset() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-uitest"]
+        app.launch()
+        app.buttons["All Cut Lists"].firstMatch.tap()
+        app.buttons["New Cut List"].firstMatch.tap()
+        app.buttons["Add Part"].tap()
+
+        type(app.textFields["Length"], "1000")
+        type(app.textFields["Width"], "300")
+
+        // Open the shape editor and apply the Pointed End preset.
+        app.buttons.containing(NSPredicate(format: "label CONTAINS 'Rectangle'")).firstMatch.tap()
+        XCTAssertTrue(app.navigationBars["Shape"].waitForExistence(timeout: 5))
+        app.buttons["Shape"].tap()
+        app.buttons["Pointed End"].tap()
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label BEGINSWITH '5 points'")).firstMatch.waitForExistence(timeout: 3))
+
+        // Switch tools to check they respond.
+        app.buttons["Add Point"].tap()
+        app.buttons["Move"].tap()
+
+        app.navigationBars["Shape"].buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(app.staticTexts["Custom Shape"].waitForExistence(timeout: 3))
+        app.buttons["Add"].tap()
+
+        // The part row marks the custom shape.
+        XCTAssertTrue(app.images["Custom shape"].waitForExistence(timeout: 5))
+    }
+
     private func type(_ field: XCUIElement, _ text: String) {
         XCTAssertTrue(field.waitForExistence(timeout: 3))
         field.tap()

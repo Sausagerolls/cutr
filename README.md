@@ -22,6 +22,7 @@
 - **Kerf / buffer** – set the gap left between parts for the blade and any extra clearance.
 - **Edge trim** – remove damaged factory edges from every side of a sheet.
 - **Grain direction lock** – stop individual parts from being rotated.
+- **Shaped parts** – turn any part into a custom outline (pointed ends, gables, triangles, chamfers) with a shape editor that snaps to a grid and to alignment guides. Shaped parts are packed as rectangular blanks, and the PDF lists each point's coordinates for marking out.
 - **Multiple materials** – mix sheet types (e.g. 18 mm ply and 6 mm MDF) in one cut list, with limited or unlimited stock.
 - **Cost and yield** – price per sheet, total cost and percentage of material used.
 - **Saved cut lists** – name, search, duplicate and sort by name, date created, date modified or number of parts.

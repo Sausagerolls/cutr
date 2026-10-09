@@ -135,3 +135,60 @@ struct LengthUnitTests {
         #expect(Project.autoLabel(27) == "AB")
     }
 }
+
+struct PartShapeTests {
+    let gable = PartShape.Preset.gable.points(length: 150, width: 260)
+
+    @Test func areaAndBounds() {
+        #expect(PartShape.area(PartShape.rectangle(length: 100, width: 50)) == 5000)
+        // Gable: 150 × 260 blank minus two corner triangles with 75 mm legs.
+        #expect(abs(PartShape.area(gable) - (150 * 260 - 2 * (75 * 75 / 2))) < 1e-6)
+        #expect(PartShape.bounds(gable) == CGRect(x: 0, y: 0, width: 150, height: 260))
+    }
+
+    @Test func rectangleDetection() {
+        #expect(PartShape.isRectangle(PartShape.rectangle(length: 10, width: 5)))
+        // A point added on an edge but not moved is still a rectangle.
+        var withPoint = PartShape.rectangle(length: 10, width: 5)
+        withPoint.insert(ShapePoint(x: 5, y: 0), at: 1)
+        #expect(PartShape.isRectangle(withPoint))
+        #expect(!PartShape.isRectangle(gable))
+    }
+
+    @Test func selfIntersectionIsRejected() {
+        let bowtie = [ShapePoint(x: 0, y: 0), ShapePoint(x: 10, y: 10), ShapePoint(x: 10, y: 0), ShapePoint(x: 0, y: 10)]
+        #expect(!PartShape.isSimple(bowtie))
+        #expect(PartShape.isSimple(gable))
+        for preset in PartShape.Preset.allCases {
+            #expect(PartShape.isSimple(preset.points(length: 300, width: 200)), "\(preset)")
+        }
+    }
+
+    @Test func rotationKeepsShapeInsideRotatedBlank() {
+        let rotated = PartShape.rotatedClockwise(gable, width: 260)
+        #expect(PartShape.bounds(rotated) == CGRect(x: 0, y: 0, width: 260, height: 150))
+        #expect(abs(PartShape.area(rotated) - PartShape.area(gable)) < 1e-6)
+    }
+
+    @Test func normalizedStartsAtOrigin() {
+        let moved = gable.map { ShapePoint(x: $0.x - 40, y: $0.y + 25) }
+        #expect(PartShape.normalized(moved) == gable)
+    }
+
+    @Test func shapedPartsPackAsBlanksAndYieldUsesRealArea() {
+        let sheet = OptimizerStock(id: UUID(), name: "Ply", length: 1000, width: 1000, thickness: 18, available: nil, price: 0)
+        let triangle = PartShape.Preset.rightTriangle.points(length: 400, width: 300)
+        let part = OptimizerPart(id: UUID(), label: "A", name: "", length: 400, width: 300, quantity: 4,
+                                 canRotate: true, stockID: sheet.id, colorIndex: 0, shape: triangle)
+        let result = CutOptimizer.optimize(stocks: [sheet], parts: [part], settings: .init(kerf: 0, edgeTrim: 0))
+        #expect(result.sheets.count == 1)
+        #expect(result.placedCount == 4)
+        for p in result.sheets[0].placements {
+            let shape = try! #require(p.shape)
+            // The outline always fits its placed blank, rotated or not.
+            #expect(PartShape.bounds(shape) == CGRect(x: 0, y: 0, width: p.length, height: p.width))
+        }
+        // Yield counts the triangles' area (half of each blank), not the blanks.
+        #expect(abs(result.totalPartArea - 4 * 400 * 300 / 2) < 1e-6)
+    }
+}

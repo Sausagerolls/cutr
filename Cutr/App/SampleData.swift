@@ -27,9 +27,13 @@ enum SampleData {
             ("Kick board", 2400, 150, 1, true, ply),
             ("Back panel", 800, 720, 3, false, mdf),
             ("Drawer base", 700, 480, 3, false, mdf),
+            ("Corner shelf", 500, 500, 2, false, ply),
         ]
         for (i, p) in kitchenParts.enumerated() {
             let part = Part(name: p.0, length: p.1, width: p.2, quantity: p.3, grainLocked: p.4, stockID: p.5.id, order: i)
+            if p.0 == "Corner shelf" {
+                part.shape = PartShape.Preset.rightTriangle.points(length: 500, width: 500)
+            }
             part.project = kitchen
         }
 
@@ -62,8 +66,12 @@ enum SampleData {
         context.insert(bird)
         let pine = StockSheet(name: "Pine Board", length: 1200, width: 150, thickness: 15, price: 6.5, order: 0)
         pine.project = bird
-        for (i, p) in [("Front", 200.0, 150.0, 1), ("Back", 250.0, 150.0, 1), ("Side", 220.0, 120.0, 2), ("Roof", 200.0, 150.0, 2), ("Floor", 120.0, 120.0, 1)].enumerated() {
-            let part = Part(name: p.0, length: p.1, width: p.2, quantity: p.3, grainLocked: true, order: i)
+        for (i, p) in [("Front", 150.0, 260.0, 1), ("Back", 150.0, 260.0, 1), ("Side", 220.0, 120.0, 2), ("Roof", 200.0, 150.0, 2), ("Floor", 120.0, 120.0, 1)].enumerated() {
+            let part = Part(name: p.0, length: p.1, width: p.2, quantity: p.3, grainLocked: false, order: i)
+            if p.0 == "Front" || p.0 == "Back" {
+                // Gable ends with a pointed top for the roof.
+                part.shape = PartShape.Preset.gable.points(length: p.1, width: p.2)
+            }
             part.project = bird
         }
         let wall = Project(name: String(localized: "Wall Cabinets"), kerf: 3, edgeTrim: 5)

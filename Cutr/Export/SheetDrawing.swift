@@ -97,17 +97,55 @@ nonisolated enum SheetDrawing {
         let fontSize = max(7, min(14, min(sheetRect.width, sheetRect.height) / 15))
         for placement in sheet.placements {
             let r = map(placement.rect)
-            cg.setFillColor(color(placement.colorIndex).withAlphaComponent(style.partAlpha).cgColor)
-            cg.fill(r)
-            cg.setStrokeColor(style.partStroke.cgColor)
-            cg.setLineWidth(0.75)
-            cg.stroke(r.insetBy(dx: 0.375, dy: 0.375))
+            let partColor = color(placement.colorIndex)
+            if let shape = placement.shape {
+                // The rectangular blank, faintly, with the shaped part inside it.
+                cg.setFillColor(partColor.withAlphaComponent(style.partAlpha * 0.22).cgColor)
+                cg.fill(r)
+                cg.saveGState()
+                cg.setStrokeColor(style.partStroke.withAlphaComponent(0.45).cgColor)
+                cg.setLineWidth(0.5)
+                cg.setLineDash(phase: 0, lengths: [2, 2])
+                cg.stroke(r.insetBy(dx: 0.25, dy: 0.25))
+                cg.restoreGState()
+                let path = outlinePath(shape, origin: r.origin, scale: scale)
+                cg.addPath(path)
+                cg.setFillColor(partColor.withAlphaComponent(style.partAlpha).cgColor)
+                cg.fillPath()
+                cg.addPath(path)
+                cg.setStrokeColor(style.partStroke.cgColor)
+                cg.setLineWidth(0.75)
+                cg.strokePath()
+                // Centre the label on the shape rather than the blank.
+                let c = PartShape.centroid(shape)
+                let labelRect = CGRect(x: r.minX + c.x * scale - r.width / 2, y: r.minY + c.y * scale - r.height / 2,
+                                       width: r.width, height: r.height)
+                drawLabel(placement, in: labelRect, unit: unit, fontSize: fontSize, style: style)
+                continue
+            } else {
+                cg.setFillColor(partColor.withAlphaComponent(style.partAlpha).cgColor)
+                cg.fill(r)
+                cg.setStrokeColor(style.partStroke.cgColor)
+                cg.setLineWidth(0.75)
+                cg.stroke(r.insetBy(dx: 0.375, dy: 0.375))
+            }
             drawLabel(placement, in: r, unit: unit, fontSize: fontSize, style: style)
         }
 
         cg.setStrokeColor(style.sheetStroke.cgColor)
         cg.setLineWidth(1.25)
         cg.stroke(sheetRect)
+    }
+
+    /// Path for an outline given in millimetres, placed at `origin` (points).
+    static func outlinePath(_ shape: [ShapePoint], origin: CGPoint, scale: CGFloat) -> CGPath {
+        let path = CGMutablePath()
+        for (i, p) in shape.enumerated() {
+            let point = CGPoint(x: origin.x + p.x * scale, y: origin.y + p.y * scale)
+            if i == 0 { path.move(to: point) } else { path.addLine(to: point) }
+        }
+        path.closeSubpath()
+        return path
     }
 
     private static func drawLabel(_ p: Placement, in r: CGRect, unit: LengthUnit, fontSize: CGFloat, style: Style) {

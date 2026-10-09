@@ -37,6 +37,7 @@ shoot "$iphone" iphone-1-list list light
 shoot "$iphone" iphone-2-detail detail light
 shoot "$iphone" iphone-3-layout layout light
 shoot "$iphone" iphone-4-part part light
+shoot "$iphone" iphone-6-shape shape light
 shoot "$iphone" iphone-5-layout-dark layout dark
 echo "iPad ($IPAD)"
 shoot "$ipad" ipad-1-detail detail light

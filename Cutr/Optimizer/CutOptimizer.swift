@@ -24,6 +24,8 @@ nonisolated struct OptimizerPart: Sendable, Hashable {
     var canRotate: Bool
     var stockID: UUID
     var colorIndex: Int
+    /// Outline inside the length × width blank, if the part is not rectangular.
+    var shape: [ShapePoint]? = nil
 }
 
 nonisolated struct OptimizerSettings: Sendable, Hashable {
@@ -46,8 +48,12 @@ nonisolated struct Placement: Sendable, Hashable, Identifiable {
     /// Size along the sheet width (y axis).
     var width: Double
     var rotated: Bool
+    /// Outline relative to the placement's top-left corner, already rotated to match.
+    var shape: [ShapePoint]? = nil
 
     var rect: CGRect { CGRect(x: x, y: y, width: length, height: width) }
+    /// Material actually used: the outline's area for shaped parts.
+    var area: Double { shape.map(PartShape.area) ?? length * width }
 }
 
 nonisolated struct SheetLayout: Sendable, Equatable, Identifiable {
@@ -58,7 +64,7 @@ nonisolated struct SheetLayout: Sendable, Equatable, Identifiable {
     var offcuts: [CGRect]
 
     var sheetArea: Double { stock.length * stock.width }
-    var usedArea: Double { placements.reduce(0) { $0 + $1.length * $1.width } }
+    var usedArea: Double { placements.reduce(0) { $0 + $1.area } }
     var utilisation: Double { sheetArea > 0 ? usedArea / sheetArea : 0 }
 }
 
@@ -308,7 +314,8 @@ nonisolated enum CutOptimizer {
             let (l, w) = choice.rotated ? (part.width, part.length) : (part.length, part.width)
             sheets[choice.sheet].placements.append(Placement(
                 partID: part.id, label: part.label, name: part.name, colorIndex: part.colorIndex,
-                x: free.minX, y: free.minY, length: l, width: w, rotated: choice.rotated))
+                x: free.minX, y: free.minY, length: l, width: w, rotated: choice.rotated,
+                shape: part.shape.map { choice.rotated ? PartShape.rotatedClockwise($0, width: part.width) : $0 }))
             sheets[choice.sheet].free += splitFree(free, length: l, width: w, kerf: kerf, rule: split)
                 .filter { $0.width + epsilon >= minSide && $0.height + epsilon >= minSide }
         }
@@ -389,7 +396,8 @@ extension Project {
             let stockID = part.stockID.flatMap { validIDs.contains($0) ? $0 : nil } ?? fallback
             return OptimizerPart(id: part.id, label: Self.autoLabel(index), name: part.name,
                                  length: part.length, width: part.width, quantity: part.quantity,
-                                 canRotate: !part.grainLocked, stockID: stockID, colorIndex: index)
+                                 canRotate: !part.grainLocked, stockID: stockID, colorIndex: index,
+                                 shape: part.shape)
         }
         return (stocks, parts)
     }

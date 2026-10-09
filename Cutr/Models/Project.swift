@@ -67,6 +67,7 @@ final class Project {
                 name: part.name, length: part.length, width: part.width,
                 quantity: part.quantity, grainLocked: part.grainLocked,
                 stockID: part.stockID.flatMap { idMap[$0] }, order: part.order)
+            p.shapeData = part.shapeData
             p.project = copy
         }
         return copy
@@ -113,6 +114,9 @@ final class Part {
     var grainLocked: Bool = false
     /// The stock sheet this part must be cut from. Nil means the project's first stock sheet.
     var stockID: UUID?
+    /// JSON-encoded outline for non-rectangular parts. Nil means a plain rectangle.
+    /// When set, `length` and `width` are the outline's bounding box (the blank).
+    var shapeData: Data?
     var order: Int = 0
     var createdAt: Date = Date.now
     var project: Project?
@@ -128,5 +132,10 @@ final class Part {
         self.stockID = stockID
         self.order = order
         self.createdAt = .now
+    }
+
+    var shape: [ShapePoint]? {
+        get { PartShape.decode(shapeData) }
+        set { shapeData = PartShape.encode(newValue) }
     }
 }

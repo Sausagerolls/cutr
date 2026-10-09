@@ -91,6 +91,7 @@ struct ProjectDetailView: View {
                 switch LaunchOptions.screen {
                 case "layout": showLayout = true
                 case "part": editing = project.sortedParts.first.map { .part($0) }
+                case "shape": editing = project.sortedParts.first { $0.shape != nil }.map { .part($0) }
                 default: break
                 }
             }
@@ -292,6 +293,12 @@ private struct PartRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
                     Text(part.name.isEmpty ? String(localized: "Part") : part.name)
+                    if part.shape != nil {
+                        Image(systemName: "pentagon")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .accessibilityLabel("Custom shape")
+                    }
                     if part.grainLocked {
                         Image(systemName: "lock.fill")
                             .font(.caption2)

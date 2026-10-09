@@ -15,6 +15,7 @@ nonisolated struct CutSheetReport: Sendable {
         var grainLocked: Bool
         var stockName: String
         var colorIndex: Int
+        var shape: [ShapePoint]?
     }
 
     var title: String
@@ -40,7 +41,7 @@ nonisolated struct CutSheetReport: Sendable {
             let stockName = stocks.first { $0.id == part.stockID }?.name ?? firstName
             return PartRow(label: Project.autoLabel(index), name: part.name, length: part.length,
                            width: part.width, quantity: part.quantity, grainLocked: part.grainLocked,
-                           stockName: stockName, colorIndex: index)
+                           stockName: stockName, colorIndex: index, shape: part.shape)
         }
         self.result = result
     }
@@ -93,6 +94,12 @@ nonisolated enum PDFExporter {
                 var y = header(report)
                 y = summary(report, top: y)
                 y = partsTable(report, top: y) { beginPage(); return margin }
+
+                let shaped = report.parts.filter { $0.shape != nil }
+                if !shaped.isEmpty {
+                    beginPage()
+                    shapedParts(report, parts: shaped, context: ctx.cgContext) { beginPage(); return margin }
+                }
 
                 // Sheets flow onto pages, two or more per page when they fit.
                 y = content.maxY
@@ -305,7 +312,7 @@ nonisolated enum PDFExporter {
                 cg.fill(CGRect(x: content.minX + 2, y: y + 1, width: 9, height: 9))
             }
             let values = [
-                "", part.label, part.name.isEmpty ? "—" : part.name,
+                "", part.label, (part.name.isEmpty ? "—" : part.name) + (part.shape != nil ? String(localized: " (shaped)") : ""),
                 u.format(part.length), u.format(part.width), "\(part.quantity)",
                 part.grainLocked ? String(localized: "Locked") : "", part.stockName,
             ]
@@ -317,6 +324,85 @@ nonisolated enum PDFExporter {
             y += 16
         }
         return y
+    }
+
+    /// One block per shaped part: a numbered outline and the coordinates of each
+    /// point measured from the blank's top-left corner, for marking out.
+    private static func shapedParts(_ r: CutSheetReport, parts: [CutSheetReport.PartRow], context cg: CGContext, newPage: () -> CGFloat) {
+        let u = r.unit
+        var y = content.minY
+        y += text(String(localized: "Shaped Parts"), at: CGPoint(x: content.minX, y: y), attrs(16, .bold))
+        y += text(String(localized: "Cut each blank to size first, then mark out the points below from the blank's top-left corner (X along the length, Y down the width)."),
+                  at: CGPoint(x: content.minX, y: y + 2), attrs(9.5, color: .darkGray)) + 12
+
+        for part in parts {
+            guard let shape = part.shape else { continue }
+            let rows = shape.count
+            let blockHeight = max(190, CGFloat(rows) * 14 + 56)
+            if y + blockHeight > content.maxY {
+                y = newPage()
+            }
+            var title = "\(part.label)"
+            if !part.name.isEmpty { title += " \(part.name)" }
+            text(title, at: CGPoint(x: content.minX, y: y), attrs(12, .bold))
+            text(String(localized: "Blank \(u.format(part.length)) × \(u.format(part.width)) \(u.symbol) · Qty \(part.quantity)"),
+                 at: CGPoint(x: content.minX, y: y + 15), attrs(9.5, color: .darkGray))
+
+            // Outline, numbered.
+            let box = CGRect(x: content.minX + 12, y: y + 46, width: 186, height: blockHeight - 60)
+            let b = PartShape.bounds(shape)
+            let scale = min(box.width / max(b.width, 1), box.height / max(b.height, 1))
+            let origin = CGPoint(x: box.minX + (box.width - b.width * scale) / 2, y: box.minY + (box.height - b.height * scale) / 2)
+            cg.saveGState()
+            cg.setStrokeColor(UIColor(white: 0.6, alpha: 1).cgColor)
+            cg.setLineWidth(0.5)
+            cg.setLineDash(phase: 0, lengths: [3, 3])
+            cg.stroke(CGRect(x: origin.x, y: origin.y, width: b.width * scale, height: b.height * scale))
+            cg.restoreGState()
+            let path = SheetDrawing.outlinePath(shape, origin: origin, scale: scale)
+            cg.addPath(path)
+            cg.setFillColor(SheetDrawing.color(part.colorIndex).withAlphaComponent(0.45).cgColor)
+            cg.fillPath()
+            cg.addPath(path)
+            cg.setStrokeColor(UIColor.black.cgColor)
+            cg.setLineWidth(1)
+            cg.strokePath()
+            let center = PartShape.centroid(shape)
+            for (i, p) in shape.enumerated() {
+                let pt = CGPoint(x: origin.x + p.x * scale, y: origin.y + p.y * scale)
+                cg.setFillColor(UIColor.black.cgColor)
+                cg.fillEllipse(in: CGRect(x: pt.x - 2, y: pt.y - 2, width: 4, height: 4))
+                // Number sits just outside the outline, away from the centre.
+                let dx = p.x - center.x, dy = p.y - center.y
+                let d = max(hypot(dx, dy), 1)
+                let labelPoint = CGPoint(x: pt.x + dx / d * 10 - 4, y: pt.y + dy / d * 10 - 6)
+                text("\(i + 1)", at: labelPoint, width: 20, attrs(8, .bold))
+            }
+
+            // Coordinate table.
+            let tableX = content.minX + 230
+            var rowY = y + 36
+            let columns: [(String, CGFloat)] = [(String(localized: "Point"), 40), ("X (\(u.symbol))", 70), ("Y (\(u.symbol))", 70),
+                                                 (String(localized: "Edge to next (\(u.symbol))"), 100)]
+            var x = tableX
+            for col in columns {
+                text(col.0, at: CGPoint(x: x, y: rowY), width: col.1, attrs(8, .semibold, color: .darkGray), alignRight: col.0 != columns[0].0)
+                x += col.1 + 6
+            }
+            rowY += 14
+            for (i, p) in shape.enumerated() {
+                let next = shape[(i + 1) % shape.count]
+                let values = ["\(i + 1)", u.format(p.x), u.format(p.y), u.format(PartShape.distance(p, next))]
+                x = tableX
+                for (j, col) in columns.enumerated() {
+                    text(values[j], at: CGPoint(x: x, y: rowY), width: col.1, attrs(9.5, mono: j > 0), alignRight: j > 0)
+                    x += col.1 + 6
+                }
+                rowY += 14
+            }
+            y += blockHeight + 10
+            line(y - 6)
+        }
     }
 
     /// Groups identical placements so the legend lists "3 × A" rather than three rows.
