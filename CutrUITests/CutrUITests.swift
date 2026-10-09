@@ -1,0 +1,75 @@
+import XCTest
+
+final class CutrUITests: XCTestCase {
+    override func setUp() {
+        continueAfterFailure = false
+    }
+
+    @MainActor
+    func testCreateCutListAddPartsAndViewLayout() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-uitest"]
+        app.launch()
+
+        // Empty state offers a button to create the first cut list.
+        app.buttons["New Cut List"].firstMatch.tap()
+
+        // Add two parts using "Save and Add Another".
+        let addPart = app.buttons["Add Part"]
+        XCTAssertTrue(addPart.waitForExistence(timeout: 5))
+        addPart.tap()
+
+        let name = app.textFields["Name (optional)"]
+        XCTAssertTrue(name.waitForExistence(timeout: 5))
+        name.typeText("Shelf")
+        type(app.textFields["Length"], "1000")
+        type(app.textFields["Width"], "300")
+        app.buttons["Save and Add Another"].tap()
+
+        app.textFields["Name (optional)"].tap()
+        app.textFields["Name (optional)"].typeText("Side")
+        type(app.textFields["Length"], "800")
+        type(app.textFields["Width"], "400")
+        app.buttons["Add"].tap()
+
+        XCTAssertTrue(app.staticTexts["Shelf"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["Side"].exists)
+
+        // Open the layout and check one sheet is used.
+        let viewLayout = app.buttons.containing(NSPredicate(format: "label CONTAINS 'View Cutting Layout'")).firstMatch
+        if !viewLayout.isHittable { app.swipeUp() }
+        XCTAssertTrue(viewLayout.waitForExistence(timeout: 5))
+        viewLayout.tap()
+        XCTAssertTrue(app.staticTexts["Sheet 1 of 1"].waitForExistence(timeout: 5))
+
+        // Export menu offers PDF and print.
+        app.buttons["Export"].tap()
+        XCTAssertTrue(app.buttons["Export PDF"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["Print"].exists)
+    }
+
+    @MainActor
+    func testSortAndDuplicate() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-demo"]
+        app.launch()
+
+        let first = app.cells.firstMatch
+        XCTAssertTrue(first.waitForExistence(timeout: 5))
+        XCTAssertTrue(first.staticTexts["Kitchen Base Units"].exists)
+
+        app.buttons["Sort"].tap()
+        app.buttons["Name"].tap()
+        XCTAssertTrue(app.cells.firstMatch.staticTexts["Bird Box"].waitForExistence(timeout: 3))
+
+        app.cells.firstMatch.press(forDuration: 1)
+        app.buttons["Duplicate"].tap()
+        XCTAssertTrue(app.staticTexts["Bird Box Copy"].waitForExistence(timeout: 5))
+    }
+
+    private func type(_ field: XCUIElement, _ text: String) {
+        XCTAssertTrue(field.waitForExistence(timeout: 3))
+        field.tap()
+        field.typeText(text)
+    }
+}

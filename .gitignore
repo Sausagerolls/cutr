@@ -1,0 +1,14 @@
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcscmblueprint
+*.moved-aside
+# The Xcode project is generated from project.yml by XcodeGen
+Cutr.xcodeproj/
+# macOS
+.DS_Store
+# Fastlane / misc
+*.ipa
+*.dSYM.zip

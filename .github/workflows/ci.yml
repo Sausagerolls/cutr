@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project
+        run: xcodegen generate
+      - name: Unit tests
+        run: |
+          DEVICE=$(xcrun simctl list devices available | grep -m1 -oE 'iPhone [0-9]+ Pro \(' | sed 's/ ($//')
+          xcodebuild test -project Cutr.xcodeproj -scheme Cutr \
+            -destination "platform=iOS Simulator,name=${DEVICE}" \
+            -only-testing:CutrTests \
+            CODE_SIGNING_ALLOWED=NO
