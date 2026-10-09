@@ -18,6 +18,9 @@ struct PartEditorView: View {
     @State private var formID = UUID()
     @State private var shape: [ShapePoint]?
     @State private var showShapeEditor = false
+    /// onAppear runs again when returning from the shape editor; only load once
+    /// so unsaved edits (including a new shape) are kept.
+    @State private var loaded = false
     @FocusState private var nameFocused: Bool
 
     private var isNew: Bool { part == nil }
@@ -202,6 +205,8 @@ struct PartEditorView: View {
     }
 
     private func load() {
+        guard !loaded else { return }
+        loaded = true
         if let part {
             name = part.name
             length = part.length

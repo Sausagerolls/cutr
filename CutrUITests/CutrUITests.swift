@@ -121,6 +121,32 @@ final class CutrUITests: XCTestCase {
         XCTAssertTrue(app.images["Custom shape"].waitForExistence(timeout: 5))
     }
 
+    @MainActor
+    func testEditingExistingPartShapeIsSaved() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-demo", "-screen", "part"]
+        app.launch()
+
+        // The demo opens the first part (Side panel) of Kitchen Base Units.
+        XCTAssertTrue(app.navigationBars["Edit Part"].waitForExistence(timeout: 5))
+        app.buttons.containing(NSPredicate(format: "label CONTAINS 'Rectangle'")).firstMatch.tap()
+        XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5))
+        app.buttons["Shapes"].tap()
+        app.buttons["Chamfered Corners"].tap()
+        app.buttons["Done"].tap()
+
+        // Back in the part editor the new shape is kept, then saved.
+        XCTAssertTrue(app.staticTexts["Custom Shape"].waitForExistence(timeout: 3))
+        app.buttons["Save"].tap()
+
+        // Reopen the part: the shape is still there.
+        let row = app.buttons.containing(NSPredicate(format: "label CONTAINS 'Side panel'")).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.images["Custom shape"].firstMatch.exists)
+        row.tap()
+        XCTAssertTrue(app.staticTexts["Custom Shape"].waitForExistence(timeout: 5))
+    }
+
     private func type(_ field: XCUIElement, _ text: String) {
         XCTAssertTrue(field.waitForExistence(timeout: 3))
         field.tap()
