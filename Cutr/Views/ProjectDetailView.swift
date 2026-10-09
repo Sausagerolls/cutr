@@ -103,9 +103,16 @@ struct ProjectDetailView: View {
         // Debounce rapid edits such as typing a dimension.
         try? await Task.sleep(for: .milliseconds(result == .empty ? 0 : 150))
         guard !Task.isCancelled else { return }
-        let output = await Task.detached(priority: .userInitiated) {
+        // A detached task does not inherit cancellation, so forward it. Otherwise
+        // every keystroke would leave a stale optimisation running in the background.
+        let work = Task.detached(priority: .userInitiated) {
             CutOptimizer.optimize(stocks: input.stocks, parts: input.parts, settings: settings)
-        }.value
+        }
+        let output = await withTaskCancellationHandler {
+            await work.value
+        } onCancel: {
+            work.cancel()
+        }
         guard !Task.isCancelled else { return }
         result = output
         isOptimising = false

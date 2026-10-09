@@ -117,16 +117,21 @@ nonisolated enum CutOptimizer {
     private static let epsilon = 1e-6
 
     enum SortRule: CaseIterable { case area, longestSide, perimeter, length, width }
-    enum FitRule: CaseIterable { case bestArea, bestShortSide, bestLongSide, topLeft }
-    enum SplitRule: CaseIterable { case shorterLeftover, longerLeftover, minArea, maxArea, horizontal, vertical }
+    enum FitRule: CaseIterable { case bestShortSide, bestArea, bestLongSide, topLeft }
+    enum SplitRule: CaseIterable { case shorterLeftover, minArea, longerLeftover, maxArea, horizontal, vertical }
 
-    static func optimize(stocks: [OptimizerStock], parts: [OptimizerPart], settings: OptimizerSettings) -> OptimizationResult {
+    /// Searches heuristic combinations until `timeLimit` seconds have passed, then
+    /// returns the best layout found so far. At least one full layout is always produced.
+    /// Stops early, returning the best so far, if the surrounding task is cancelled.
+    static func optimize(stocks: [OptimizerStock], parts: [OptimizerPart], settings: OptimizerSettings,
+                         timeLimit: TimeInterval = 1.0) -> OptimizationResult {
+        let deadline = Date.now.addingTimeInterval(timeLimit)
         var sheets: [SheetLayout] = []
         var unplaced: [UnplacedPart] = []
         for stock in stocks {
             let group = parts.filter { $0.stockID == stock.id && $0.quantity > 0 }
             guard !group.isEmpty else { continue }
-            let result = optimize(stock: stock, parts: group, settings: settings)
+            let result = optimize(stock: stock, parts: group, settings: settings, deadline: deadline)
             sheets += result.sheets
             unplaced += result.unplaced
         }
@@ -148,7 +153,7 @@ nonisolated enum CutOptimizer {
         var placements: [Placement]
     }
 
-    private static func optimize(stock: OptimizerStock, parts: [OptimizerPart], settings: OptimizerSettings) -> (sheets: [SheetLayout], unplaced: [UnplacedPart]) {
+    private static func optimize(stock: OptimizerStock, parts: [OptimizerPart], settings: OptimizerSettings, deadline: Date) -> (sheets: [SheetLayout], unplaced: [UnplacedPart]) {
         let trim = max(settings.edgeTrim, 0)
         let kerf = max(settings.kerf, 0)
         let usable = CGRect(x: trim, y: trim, width: stock.length - 2 * trim, height: stock.width - 2 * trim)
@@ -165,16 +170,25 @@ nonisolated enum CutOptimizer {
         }
 
         var best: (sheets: [WorkingSheet], unplaced: [OptimizerPart], score: Score)?
-        for sort in SortRule.allCases {
-            let ordered = sorted(items, by: sort)
+        // Free rectangles narrower than the smallest part's short side can never be used.
+        let minSide = items.map { min($0.length, $0.width) }.min() ?? 0
+
+        // Interleave sort orders so a time-limited search still tries each one.
+        var combos: [(SortRule, FitRule, SplitRule)] = []
+        for split in SplitRule.allCases {
             for fit in FitRule.allCases {
-                for split in SplitRule.allCases {
-                    let run = pack(ordered, usable: usable, kerf: kerf, available: stock.available, fit: fit, split: split)
-                    let score = Score(run.sheets, unplaced: run.unplaced.count, sheetArea: usable.width * usable.height)
-                    if best == nil || score < best!.score {
-                        best = (run.sheets, run.unplaced, score)
-                    }
-                }
+                for sort in SortRule.allCases { combos.append((sort, fit, split)) }
+            }
+        }
+        var orderedCache: [SortRule: [OptimizerPart]] = [:]
+        search: for (sort, fit, split) in combos {
+            if best != nil && (Date.now >= deadline || Task.isCancelled) { break search }
+            let ordered = orderedCache[sort] ?? sorted(items, by: sort)
+            orderedCache[sort] = ordered
+            let run = pack(ordered, usable: usable, kerf: kerf, minSide: minSide, available: stock.available, fit: fit, split: split)
+            let score = Score(run.sheets, unplaced: run.unplaced.count, sheetArea: usable.width * usable.height)
+            if best == nil || score < best!.score {
+                best = (run.sheets, run.unplaced, score)
             }
         }
 
@@ -250,7 +264,7 @@ nonisolated enum CutOptimizer {
         length <= size.width + epsilon && width <= size.height + epsilon
     }
 
-    private static func pack(_ items: [OptimizerPart], usable: CGRect, kerf: Double, available: Int?,
+    private static func pack(_ items: [OptimizerPart], usable: CGRect, kerf: Double, minSide: Double, available: Int?,
                              fit: FitRule, split: SplitRule) -> (sheets: [WorkingSheet], unplaced: [OptimizerPart]) {
         var sheets: [WorkingSheet] = []
         var unplaced: [OptimizerPart] = []
@@ -296,6 +310,7 @@ nonisolated enum CutOptimizer {
                 partID: part.id, label: part.label, name: part.name, colorIndex: part.colorIndex,
                 x: free.minX, y: free.minY, length: l, width: w, rotated: choice.rotated))
             sheets[choice.sheet].free += splitFree(free, length: l, width: w, kerf: kerf, rule: split)
+                .filter { $0.width + epsilon >= minSide && $0.height + epsilon >= minSide }
         }
         return (sheets, unplaced)
     }

@@ -56,6 +56,17 @@ struct CutOptimizerTests {
         }
     }
 
+    @Test func manySmallPartsFinishQuickly() {
+        // Regression: 999 identical small parts used to take over 20 seconds in debug builds.
+        let start = Date.now
+        let result = CutOptimizer.optimize(stocks: [sheet], parts: [part(50, 50, qty: 999), part(120, 80, qty: 400)],
+                                           settings: .init(kerf: 3, edgeTrim: 0))
+        #expect(Date.now.timeIntervalSince(start) < 5)
+        #expect(result.unplacedCount == 0)
+        #expect(result.placedCount == 1399)
+        assertValid(result, kerf: 3, trim: 0)
+    }
+
     @Test func grainLockedPartIsNeverRotated() {
         let result = CutOptimizer.optimize(stocks: [sheet], parts: [part(600, 1000, qty: 3, rotate: false)],
                                            settings: .init(kerf: 3, edgeTrim: 0))
